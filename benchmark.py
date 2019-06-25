@@ -8,7 +8,7 @@ import gdal
 
 import pstats, cProfile
 
-n=750
+n=3500
 HH = gdal.Open(r"C:\Users\brownn\RS2_OK64300_PK591962_DK524798_F0W3_20150617_130940_HH_HV_SLC\imagery_HH_complex.tif") 
 hh = HH.ReadAsArray(xoff=5000, yoff=5000, xsize=n, ysize=n)   
 hh = hh[0] + 1j*hh[1]
@@ -24,6 +24,7 @@ totpow = np.sum(pow, axis=0)
 #pav = generate_pav(totpow, n=3)   
 
 # out1 = np.asarray(ps_py(img=np.absolute(sar), P=totpow, NUMLK=1, WINSIZE=5))
+
 cProfile.runctx("np.asarray(ps_c(img=np.absolute(sar), P=totpow, NUMLK=1, WINSIZE=5))", globals(), locals(), "Profile.prof")
 
 s = pstats.Stats("Profile.prof")

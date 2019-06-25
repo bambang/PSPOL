@@ -258,7 +258,7 @@ def PSPOLFIL(img, P, NUMLK, WINSIZE):
                 output[channel, ii, jj] = Vf(img_pad[channel, :, :], i, j, n, N2, b, F) 
                 
             if 100 * (i*j) / (img_x*img_y) > pdone:
-                print(pdone)
+                print(pdone,f1, f2)
                 #print(pdone, b, Mu, Nu, img_pad[channel, i, j], output[channel, ii, jj])
                 pdone +=1
                 

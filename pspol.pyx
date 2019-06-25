@@ -26,6 +26,8 @@ cdef int[:,:] Wd(int d, int n=3):
     
 
 cdef int[:,:] Fk(int k, int n):
+    ''' The index-array mapping is different than the python implementation
+    which uses the original indices based on Lee(1999).  This is done so that '''
     cdef int[:,:] Wd
     if k==0:
         Fk = np.ones((n,n), dtype='int32')
@@ -48,7 +50,9 @@ cdef int[:,:] Fk(int k, int n):
     elif k==7:
         Fk = np.array(np.flip(np.tril(np.repeat(1, n)), 1), dtype='int32')
     return(Fk)
-    
+
+
+   
 cdef int[:] fk_from_wd(int d):
     cdef dict lookup = {0: [0, 4],
                         1: [2, 6],
@@ -57,6 +61,7 @@ cdef int[:] fk_from_wd(int d):
     cdef int[2] result = lookup[d]
     return(result)
     
+@cython.profile(True)    
 cdef double check_fk_avg(double[:,:] P, int i, int j, int n, double N2, int[:,:] Fk):
     cdef double avg = 0
     cdef int ip, jp
@@ -79,7 +84,7 @@ cdef choose_fk(double[:,:]Pav, int i, int j, int n, double N2, int[:,:] F1, int[
     else:
         return F2
         
-                
+@cython.profile(True)                
 cdef double wd(double[:,:] Pav, int i, int j, int[:,:] Wd, int m):
     '''At the current pixel of the averaged total power image, (i,j), compute edge strengths, wd, in four directions (d=1,2,3,4) as follows:
                    1     1
@@ -94,8 +99,8 @@ cdef double wd(double[:,:] Pav, int i, int j, int[:,:] Wd, int m):
             wd += Pav[ip*m + i, jp*m + i] * Wd[ip+1, jp+1]
     return abs(wd)
     
-    
-cdef int ws(double[:,:] Pav, int i, int j, int m, list WD):
+@cython.profile(True)    
+cdef int ws(double[:,:] Pav, int i, int j, int m, int[:,:,:] WD):
     '''
     Find the direction, s, that yields the strongest edge. It is given by the maximum of the four edge strengths, as follows:
             ws = max ( w1, w2, w3, w4 )
@@ -110,7 +115,7 @@ cdef int ws(double[:,:] Pav, int i, int j, int m, list WD):
     cdef double current
     
     for d in range(4):
-        current = wd(Pav, i, j, WD[d], m)
+        current = wd(Pav, i, j, WD[d,:,:], m)
         if current > greatest:
             greatest = current
             ix = d
@@ -118,6 +123,7 @@ cdef int ws(double[:,:] Pav, int i, int j, int m, list WD):
     return(ix)
 
 @cython.profile(True)
+@cython.cdivision(True)
 cdef double mu(double[:,:] P, int i, int j, int[:,:] F, int n, double N2):
     '''
     Mean of total power within F-window
@@ -134,6 +140,7 @@ cdef double mu(double[:,:] P, int i, int j, int[:,:] F, int n, double N2):
     return sigma 
 
 @cython.profile(True)
+@cython.cdivision(True)
 cdef double nu(double[:,:] P, int i, int j, int[:,:] F, int n, double N2, double mu):
     '''
            1     n     n                                      N2
@@ -142,14 +149,16 @@ cdef double nu(double[:,:] P, int i, int j, int[:,:] F, int n, double N2, double
     '''
     cdef double sigma = 0
     cdef Py_ssize_t ip, jp
+    cdef double array_val
     for ip in range(-n, n+1):
         for jp in range(-n, n+1):
-            sigma += F[ip+n, jp+n] * (P[ip + i, jp + j])**2
+            array_val = P[ip + i, jp + j]
+            sigma += F[ip+n, jp+n] * array_val*array_val
   
     cdef double result = (1 / (N2 - 1)) * sigma - (N2 * mu*mu) / (N2 - 1)
     return result
     
-    
+@cython.profile(True)    
 cdef double weight(int L, double nu, double mu):
     '''
 Compute the filter weight, b, as follows:
@@ -157,9 +166,10 @@ Compute the filter weight, b, as follows:
             b = max( -----------, 0 )
                      (L+1) * nu
     ''' 
-    cdef double result = fmax(((L * nu - mu**2) / ((L + 1) * nu)), 0)
+    cdef double result = fmax(((L * nu - mu*mu) / ((L + 1) * nu)), 0)
     return result
 
+@cython.profile(True)
 cdef double Vf(double[:,:] V, int i, int j, int n, double N2, double b, int[:,:] F):
     '''
 Loop over all elements (channels) of the input polarimetric matrix. Filter the current polarimetric element as follows:
@@ -188,9 +198,19 @@ cpdef double[:,:,:] PSPOLFIL(double[:,:,:] img, double[:,:] P, int NUMLK, int WI
     cdef int n = (N - 1) / 2   # length of filter kernel on either side of centre
     cdef double N2 = (N * (N + 1)) / 2 # number of '1' elements in in F kernel
     
-    WD = [Wd(d) for d in range(4)]
-    FK = [Fk(k, N) for k in range(8)]
+    cdef int ii, i, jj, j, f1, f2, strongest_edge_d, channel
+    cdef double Mu, Nu, b
     
+    #WD = [Wd(d) for d in range(4)]
+    cdef int[:,:,:] WD  = np.empty((4,3,3), dtype='int32')
+    for i in range(4):
+        WD[i,:,:] = Wd(i) 
+        
+    #FK = [Fk(k, N) for k in range(8)]
+    cdef int[:,:,:] FK = np.empty((8,N,N), dtype='int32')
+    for i in range(8):
+        FK[i,:,:] = Fk(i, N)
+        
     cdef double[:,:,:] output = np.empty_like(img)
 
     cdef double[:,:] P_pad = np.pad(P, n, 'symmetric')
@@ -202,9 +222,6 @@ cpdef double[:,:,:] PSPOLFIL(double[:,:,:] img, double[:,:] P, int NUMLK, int WI
     cdef Py_ssize_t img_x = img.shape[1]
     cdef Py_ssize_t img_y = img.shape[2]
 
-    cdef int ii, i, jj, j, strongest_edge_d, channel
-    cdef double Mu, Nu, b
-    
     for ii in range(img_x):
         i = ii + n
         
@@ -213,7 +230,7 @@ cpdef double[:,:,:] PSPOLFIL(double[:,:,:] img, double[:,:] P, int NUMLK, int WI
             
             strongest_edge_d = ws(Pav=Pav, i=i, j=j, m=m, WD=WD)
             f1, f2 = fk_from_wd(d=strongest_edge_d)
-            F = choose_fk(P_pad, i, j, n, N2, F1=FK[f1], F2=FK[f2])
+            F = choose_fk(P_pad, i, j, n, N2, F1=FK[f1,:,:], F2=FK[f2,:,:])
             
             Mu = mu(P_pad, i, j, F, n, N2)
             Nu = nu(P_pad, i, j, F, n, N2, Mu)

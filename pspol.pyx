@@ -263,6 +263,9 @@ cpdef double[:,:,:] _PSPOLFIL(double[:,:,:] img, double[:,:] P, int NUMLK, int W
         for jj in range(img_y):
             j = jj + n
             
+            if P_pad[i,j] == 0:
+                continue 
+                
             f1 = ws(Pav=Pav, i=i, j=j, m=m, WD=WD)
             f2 = f1 + 4
 
@@ -270,7 +273,7 @@ cpdef double[:,:,:] _PSPOLFIL(double[:,:,:] img, double[:,:] P, int NUMLK, int W
             
             Mu = mu(P_pad, i, j, F, n, N2)
             Nu = nu(P_pad, i, j, F, n, N2, Mu)
-            
+
             b = weight(L=L, nu=Nu, mu=Mu)
             
             for channel in range(img.shape[0]):
@@ -331,7 +334,7 @@ cpdef double complex [:,:,:] _PSPOLFIL_complex(double complex [:,:,:] img, doubl
     for i in range(8):
         FK[i,:,:] = Fk(i, N)
         
-    cdef double complex [:,:,:] output = np.empty_like(img)
+    cdef double complex [:,:,:] output = np.zeros_like(img)
 
     cdef double[:,:] P_pad = np.pad(P, n, 'symmetric')
     cdef double[:,:] Pav = generate_pav(P_pad)
@@ -346,6 +349,9 @@ cpdef double complex [:,:,:] _PSPOLFIL_complex(double complex [:,:,:] img, doubl
         i = ii + n
         
         for jj in range(img_y):
+            if P_pad[i,j] == 0:
+                continue 
+                
             j = jj + n
             
             f1 = ws(Pav=Pav, i=i, j=j, m=m, WD=WD)

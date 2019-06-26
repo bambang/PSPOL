@@ -7,7 +7,26 @@ from cython.parallel import prange
 
 # cython: profile=True
 
-
+def pspolfil(img, P, numlook, winsize):
+    if not P.dtype == np.float64:
+        raise TypeError("Total power array must be of type DOUBLE (np.float64)")
+    
+    if len(img.shape) == 2:
+        img = np.moveaxis(np.atleast_3d(img), 2, 0) 
+        
+    if 'complex' in str(img.dtype):
+        if not img.dtype == np.complex128:
+            raise TypeError("Input array must be of type COMPLEX DOUBLE (np.complex128)")
+        result = _PSPOLFIL_complex(img, P, numlook, winsize)
+    
+    elif 'float' in str(img.dtype):
+        if not img.dtype == np.float64:
+            raise TypeError("Input array must be of type DOUBLE (np.float64)")
+        result = _PSPOLFIL(img, P, numlook, winsize)
+    
+    result = np.asarray(result, dtype=img.dtype)
+    
+    return result
 
 cdef double[:,:] generate_pav(double[:,:] Ptot, int n=3):
     filtr = np.ones((n,n)) / n**2
@@ -205,7 +224,7 @@ Loop over all elements (channels) of the input polarimetric matrix. Filter the c
     
 @cython.boundscheck(False)   
 @cython.wraparound(False)       
-cpdef double[:,:,:] PSPOLFIL(double[:,:,:] img, double[:,:] P, int NUMLK, int WINSIZE):
+cpdef double[:,:,:] _PSPOLFIL(double[:,:,:] img, double[:,:] P, int NUMLK, int WINSIZE):
     ''' 
     img : array-like
         array with shape (z,y,x) where the channel varies along z
@@ -290,7 +309,7 @@ Loop over all elements (channels) of the input polarimetric matrix. Filter the c
     
 @cython.boundscheck(False)   
 @cython.wraparound(False)       
-cpdef double complex [:,:,:] PSPOLFIL_complex(double complex [:,:,:] img, double[:,:] P, int NUMLK, int WINSIZE):
+cpdef double complex [:,:,:] _PSPOLFIL_complex(double complex [:,:,:] img, double[:,:] P, int NUMLK, int WINSIZE):
     ''' 
     img : array-like
         array with shape (z,y,x) where the channel varies along z
@@ -355,7 +374,7 @@ cpdef double complex [:,:,:] PSPOLFIL_complex(double complex [:,:,:] img, double
     
     
     
-    
+
     
     
     

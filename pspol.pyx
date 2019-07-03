@@ -8,6 +8,27 @@ from cython.parallel import prange
 # cython: profile=True
 
 def pspolfil(img, P, numlook, winsize):
+    """
+    A python implementation of the PCI Geomatics PSPOLFIL function.
+    
+    Parameters
+    ----------
+    img : array
+        A numpy array with shape (n, y, x) and data type float64 or complex128.
+        This should represent the components of the polarimetric covariance matrix
+    P : array
+        A numpy array with shape (y, x) and data type float64 corresponding 
+        to the total power image
+    numlook : int
+        The effective number of looks
+    winsize : int
+        The size of the filtering window. 
+        
+    Returns
+    -------
+    array
+        A numpy array of shape (n, y, x) 
+    """
     if not P.dtype == np.float64:
         raise TypeError("Total power array must be of type DOUBLE (np.float64)")
     

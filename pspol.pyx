@@ -1,13 +1,48 @@
 cimport cython
+
 import numpy as np
+from sys import stdout
 
 from libc.math cimport fmax, abs
 from scipy.signal import convolve2d
 from cython.parallel import prange
+from cpython.exc cimport PyErr_CheckSignals
 
 # cython: profile=True
+def pspolfil_memsafe(img, P, numlook, winsize, pieces=1):
+    if len(img.shape) == 2:
+        img = np.moveaxis(np.atleast_3d(img), 2, 0)
+        
+    result = np.empty_like(img)
+    N = img.shape[2]
+    k = N // pieces
+    kp = k + N % pieces
+    n = (winsize - 1) // 2
+    
+    for win_i in range(pieces):
+        print("Begin piece {} of {}".format(win_i+1, pieces))
+        if win_i == 0:
+            rdrng = range(0, k + n)
+            chkrng = range(0, k)
+            wrtrng = range(0, k)
+        
+        elif 0 < win_i < pieces - 1:
+            rdrng = range(win_i*k - n, (win_i + 1) * k + n)
+            chkrng = range(n, k + n)
+            wrtrng = range(win_i*k, (win_i + 1)*k)
+            
+        elif win_i == pieces - 1:
+            rdrng = range(win_i*k - n, N)
+            chkrng = range(n, kp + n)
+            wrtrng = range(win_i*k, N)
+            
+        result[:, :, wrtrng] = pspolfil(img[:, :, rdrng], P[:, rdrng], numlook, winsize)[:, :, chkrng]
+    
+    return result
+    
 
 def pspolfil(img, P, numlook, winsize):
+    stdout.write("Beginning filter \n")
     if not P.dtype == np.float64:
         raise TypeError("Total power array must be of type DOUBLE (np.float64)")
     
@@ -76,9 +111,6 @@ cdef int[:,:] Fk(int k, int n):
 
 
      
-@cython.cdivision(True)
-@cython.boundscheck(False)   
-@cython.wraparound(False) 
 cdef double check_fk_avg(double[:,:] P, int i, int j, int n, double N2, int[:,:] Fk):
     cdef double avg = 0
     cdef int ip, jp
@@ -89,8 +121,6 @@ cdef double check_fk_avg(double[:,:] P, int i, int j, int n, double N2, int[:,:]
     return avg
 
 
-@cython.boundscheck(False)   
-@cython.wraparound(False) 
 cdef int[:,:] choose_fk(double[:,:]Pav, int i, int j, int n, double N2, int[:,:] F1, int[:,:] F2):
     '''The two Fk windows that are aligned with the strongest edge, ws, are examined. 
     The window with its avearge power closest to the Pav of the central pixel is selected and is represented as F.
@@ -104,26 +134,7 @@ cdef int[:,:] choose_fk(double[:,:]Pav, int i, int j, int n, double N2, int[:,:]
     else:
         return F2
         
-    
-@cython.boundscheck(False)   
-@cython.wraparound(False)         
-cdef double wd(double[:,:] Pav, int i, int j, int[:,:] Wd, int m):
-    '''At the current pixel of the averaged total power image, (i,j), compute edge strengths, wd, in four directions (d=1,2,3,4) as follows:
-                   1     1
-            wd = | Sum ( Sum ( Wd(i',j') * Pav(m*i'+i,m*j'+j) ) ) |
-                   i'=-1 j'=-1
-    '''
-    cdef double edge_str = 0
-    cdef int ip, jp
-    
-    for ip in range(-1,2):
-        for jp in range(-1,2):
-            edge_str += Pav[ip*m + i, jp*m + i] * Wd[ip+1, jp+1]
-    return abs(edge_str)
-
-        
-
-@cython.boundscheck(False)   
+         
 cdef int ws(double[:,:] Pav, int i, int j, int m, int[:,:,:] WD):
     '''
     Find the direction, s, that yields the strongest edge. It is given by the maximum of the four edge strengths, as follows:
@@ -142,7 +153,7 @@ cdef int ws(double[:,:] Pav, int i, int j, int m, int[:,:,:] WD):
     for d in prange(4, nogil=True):
         for ip in range(-1,2):
             for jp in range(-1,2):
-                edge_str[d] += Pav[ip*m + i, jp*m + i] * WD[d, ip+1, jp+1]
+                edge_str[d] += Pav[ip*m + i, jp*m + j] * WD[d, ip+1, jp+1]
     
     for d in range(4):
         current = edge_str[d]
@@ -151,11 +162,7 @@ cdef int ws(double[:,:] Pav, int i, int j, int m, int[:,:,:] WD):
             ix = d
     
     return(ix)
-
-    
-@cython.cdivision(True)
-@cython.boundscheck(False)   
-@cython.wraparound(False)     
+   
 cdef double mu(double[:,:] P, int i, int j, int[:,:] F, int n, double N2):
     '''
     Mean of total power within F-window
@@ -171,9 +178,6 @@ cdef double mu(double[:,:] P, int i, int j, int[:,:] F, int n, double N2):
     sigma /= N2
     return sigma 
 
-@cython.cdivision(True)
-@cython.boundscheck(False)   
-@cython.wraparound(False)     
 cdef double nu(double[:,:] P, int i, int j, int[:,:] F, int n, double N2, double mu):
     '''
            1     n     n                                      N2
@@ -191,7 +195,7 @@ cdef double nu(double[:,:] P, int i, int j, int[:,:] F, int n, double N2, double
     cdef double result = (1 / (N2 - 1)) * sigma - (N2 * mu*mu) / (N2 - 1)
     return result
     
-   
+@cython.cdivision(False)   
 cdef double weight(int L, double nu, double mu):
     '''
 Compute the filter weight, b, as follows:
@@ -202,10 +206,7 @@ Compute the filter weight, b, as follows:
     cdef double result = fmax(((L * nu - mu*mu) / ((L + 1) * nu)), 0)
     return result
 
-
-@cython.cdivision(True)
-@cython.boundscheck(False)   
-@cython.wraparound(False)     
+    
 cdef double Vf(double[:,:] V, int i, int j, int n, double N2, double b, int[:,:] F):
     '''
 Loop over all elements (channels) of the input polarimetric matrix. Filter the current polarimetric element as follows:
@@ -221,9 +222,7 @@ Loop over all elements (channels) of the input polarimetric matrix. Filter the c
             sigma += F[ip+n, jp+n] * V[ip + i, jp + j]
     cdef double result = b * V[i, j] + ((1 - b) / N2) * sigma
     return result
-    
-@cython.boundscheck(False)   
-@cython.wraparound(False)       
+          
 cpdef double[:,:,:] _PSPOLFIL(double[:,:,:] img, double[:,:] P, int NUMLK, int WINSIZE):
     ''' 
     img : array-like
@@ -254,13 +253,18 @@ cpdef double[:,:,:] _PSPOLFIL(double[:,:,:] img, double[:,:] P, int NUMLK, int W
     cdef double[:,:,:] img_pad = np.pad(img, ((0,0),(n,n),(n,n)), 'symmetric')
     cdef int pdone = 0
     
-    cdef Py_ssize_t img_x = img.shape[1]
-    cdef Py_ssize_t img_y = img.shape[2]
+    cdef Py_ssize_t img_y = img.shape[1]
+    cdef Py_ssize_t img_x = img.shape[2]
 
-    for ii in range(img_x):
+    for ii in range(img_y):
         i = ii + n
         
-        for jj in range(img_y):
+        PyErr_CheckSignals() # in case of keyboard interrupt
+        if (100 * ii) / img_y >= pdone:
+            print("\r|" + "o"*(pdone//4) + "-"*(25-pdone//4) + "| " + str(pdone) + "%"), 
+            pdone += 1 
+            
+        for jj in range(img_x):
             j = jj + n
             
             if P_pad[i,j] == 0:
@@ -278,22 +282,16 @@ cpdef double[:,:,:] _PSPOLFIL(double[:,:,:] img, double[:,:] P, int NUMLK, int W
             
             for channel in range(img.shape[0]):
                 output[channel, ii, jj] = Vf(V=img_pad[channel, :, :], i=i, j=j, n=n, N2=N2, b=b, F=F) 
-                
-            if 100 * (i*j) / (img_x*img_y) > pdone:
-                if pdone % 5 == 0:
-                    print(pdone)
-                    pdone +=5
-                
+
+    pdone = 100
+    print("\r|" + "o"*(pdone//4) + "-"*(25-pdone//4) + "| " + str(pdone) + "%\n")    
     return(output)    
     
     
     
 #######   
     
-    
-@cython.cdivision(True)
-@cython.boundscheck(False)   
-@cython.wraparound(False)     
+       
 cdef double complex Vf_complex(double complex [:,:] V, int i, int j, int n, double N2, double b, int[:,:] F):
     '''
 Loop over all elements (channels) of the input polarimetric matrix. Filter the current polarimetric element as follows:
@@ -310,8 +308,7 @@ Loop over all elements (channels) of the input polarimetric matrix. Filter the c
     cdef double complex result = b * V[i, j] + ((1 - b) / N2) * sigma
     return result
     
-@cython.boundscheck(False)   
-@cython.wraparound(False)       
+   
 cpdef double complex [:,:,:] _PSPOLFIL_complex(double complex [:,:,:] img, double[:,:] P, int NUMLK, int WINSIZE):
     ''' 
     img : array-like
@@ -342,18 +339,24 @@ cpdef double complex [:,:,:] _PSPOLFIL_complex(double complex [:,:,:] img, doubl
     cdef double complex [:,:,:] img_pad = np.pad(img, ((0,0),(n,n),(n,n)), 'symmetric')
     cdef int pdone = 0
     
-    cdef Py_ssize_t img_x = img.shape[1]
-    cdef Py_ssize_t img_y = img.shape[2]
+    cdef Py_ssize_t img_y = img.shape[1]
+    cdef Py_ssize_t img_x = img.shape[2]
 
-    for ii in range(img_x):
+    for ii in range(img_y):
         i = ii + n
         
-        for jj in range(img_y):
-            if P_pad[i,j] == 0:
-                continue 
-                
+        PyErr_CheckSignals() # in case of keyboard interrupt
+        
+        if (100 * ii) / img_y >= pdone:
+            print "|" + "o"*(pdone//4) + "-"*(25-pdone//4) + "| " + str(pdone) + "%", 
+            pdone += 1
+    
+        for jj in range(img_x):
             j = jj + n
             
+            if P_pad[i,j] == 0:
+                continue 
+                        
             f1 = ws(Pav=Pav, i=i, j=j, m=m, WD=WD)
             f2 = f1 + 4
 
@@ -367,10 +370,7 @@ cpdef double complex [:,:,:] _PSPOLFIL_complex(double complex [:,:,:] img, doubl
             for channel in range(img.shape[0]):
                 output[channel, ii, jj] = Vf_complex(V=img_pad[channel, :, :], i=i, j=j, n=n, N2=N2, b=b, F=F) 
                 
-            if 100 * (i*j) / (img_x*img_y) > pdone:
-                if pdone % 5 == 0:
-                    print(pdone)
-                    pdone +=5
+
                 
     return(output)    
     

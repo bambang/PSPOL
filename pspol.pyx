@@ -42,7 +42,31 @@ def pspolfil_memsafe(img, P, numlook, winsize, pieces=1):
     
 
 def pspolfil(img, P, numlook, winsize):
+
     stdout.write("Beginning filter \n")
+
+    """
+    A python implementation of the PCI Geomatics PSPOLFIL function.
+    
+    Parameters
+    ----------
+    img : array
+        A numpy array with shape (n, y, x) and data type float64 or complex128.
+        This should represent the components of the polarimetric covariance matrix
+    P : array
+        A numpy array with shape (y, x) and data type float64 corresponding 
+        to the total power image
+    numlook : int
+        The effective number of looks
+    winsize : int
+        The size of the filtering window. 
+        
+    Returns
+    -------
+    array
+        A numpy array of shape (n, y, x) 
+    """
+
     if not P.dtype == np.float64:
         raise TypeError("Total power array must be of type DOUBLE (np.float64)")
     

@@ -370,10 +370,9 @@ cpdef double complex [:,:,:] _PSPOLFIL_complex(double complex [:,:,:] img, doubl
         i = ii + n
         
         PyErr_CheckSignals() # in case of keyboard interrupt
-        
         if (100 * ii) / img_y >= pdone:
-            print "|" + "o"*(pdone//4) + "-"*(25-pdone//4) + "| " + str(pdone) + "%", 
-            pdone += 1
+            print("\r|" + "o"*(pdone//4) + "-"*(25-pdone//4) + "| " + str(pdone) + "%"), 
+            pdone += 1 
     
         for jj in range(img_x):
             j = jj + n
@@ -394,10 +393,9 @@ cpdef double complex [:,:,:] _PSPOLFIL_complex(double complex [:,:,:] img, doubl
             for channel in range(img.shape[0]):
                 output[channel, ii, jj] = Vf_complex(V=img_pad[channel, :, :], i=i, j=j, n=n, N2=N2, b=b, F=F) 
                 
-
-                
+    pdone = 100
+    print("\r|" + "o"*(pdone//4) + "-"*(25-pdone//4) + "| " + str(pdone) + "%\n")    
     return(output)    
-    
     
     
     

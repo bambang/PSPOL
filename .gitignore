@@ -3,3 +3,4 @@
 *.prof
 /build/*
 *.c
+/data/RS2_filtered.npy

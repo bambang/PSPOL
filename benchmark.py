@@ -1,12 +1,17 @@
 import pkg_resources
-from .pspol import pspolfil as ps_c
+
+from PSPOL.pspol import pspolfil as ps_c
+pth = 'PSPOL'
+pre = ''
+
+    
 import numpy as np
 import time
 import pstats, cProfile
 
-RS2 = pkg_resources.resource_filename('PSPOL', 'data/RS2.npy')
-PROF_FILE = pkg_resources.resource_filename('PSPOL', 'data/Profile.prof')
-RESULT = pkg_resources.resource_filename('PSPOL', 'data/RS2_filtered.npy')
+RS2 = pkg_resources.resource_filename(pth, pre+'data/RS2.npy')
+PROF_FILE = pkg_resources.resource_filename(pth, pre+'data/Profile.prof')
+RESULT = pkg_resources.resource_filename(pth, pre+'data/RS2_filtered.npy')
 
 sar = np.load(RS2)
 approximate_calibration = 4.370677e+03
@@ -27,3 +32,4 @@ s.strip_dirs().sort_stats("time").print_stats()
 
 
 np.save(RESULT, filt)
+

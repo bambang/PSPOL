@@ -1,3 +1,5 @@
 *.html
 *.pyd
 *.prof
+/build/*
+*.c
